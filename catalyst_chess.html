@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Catalyst Chess</title>
+<style>
+:root{color-scheme:light;--dark:#a77b57;--light:#ead8bd;--ink:#252525;--accent:#277653}
+*{box-sizing:border-box}body{margin:0;background:#f5f2ed;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:980px;margin:32px auto;padding:0 18px;display:grid;grid-template-columns:minmax(280px,600px) minmax(220px,1fr);gap:26px;align-items:start}
+h1{margin:0;font-size:clamp(28px,4vw,40px)}.sub{color:#68645f;margin:4px 0 18px}
+.panel{background:white;border:1px solid #e4ded5;border-radius:16px;padding:16px;box-shadow:0 5px 20px #34220c0b}
+.status{font-weight:700;margin-bottom:12px}.board{display:grid;grid-template-columns:repeat(8,1fr);border:5px solid #61432e;border-radius:5px;overflow:hidden;aspect-ratio:1}
+.square{border:0;border-radius:0;aspect-ratio:1;display:grid;place-items:center;position:relative;padding:0;cursor:pointer;font-family:"Segoe UI Symbol","DejaVu Sans",serif;font-size:clamp(25px,5.7vw,54px);line-height:1}
+.square.light{background:var(--light)}.square.dark{background:var(--dark)}
+.square.selected{box-shadow:inset 0 0 0 5px #f2cb42}
+.square.target:after{content:"";position:absolute;width:22%;height:22%;border-radius:50%;background:#2776539c}
+.square.capture:after{content:"";position:absolute;inset:5%;border:5px solid #277653a8;border-radius:50%}
+.whitepiece{color:#fffdf4;text-shadow:-1px -1px #292929,1px 1px #292929,0 2px 2px #333}
+.blackpiece{color:#171717;text-shadow:0 1px #eee}
+.coords{position:absolute;font:10px system-ui;color:#45372c;left:4px;top:2px;pointer-events:none}
+.controls{display:flex;gap:8px;margin-top:12px}.controls button,.side button{border:1px solid #d8d0c5;background:#fff;border-radius:9px;padding:10px 13px;cursor:pointer;font-weight:600}.controls button:disabled{opacity:.4;cursor:not-allowed}
+.legend{display:flex;gap:14px;align-items:center;margin-top:13px;color:#5d5852;font-size:13px}.catalyst{font-size:24px;color:#277653}
+.side h2{font-size:19px;margin:0 0 8px}.side p{margin:7px 0;color:#514d48}.side ul{padding-left:20px;margin:8px 0}.side li{margin:6px 0}.note{background:#f2f7f3;border-left:4px solid var(--accent);padding:11px 12px;border-radius:7px;margin-top:14px;font-size:14px}
+#moves{max-height:220px;overflow:auto;font-size:14px;color:#57524c;white-space:pre-wrap}
+.promo{display:none;gap:8px;flex-wrap:wrap;margin-top:12px}.promo.show{display:flex}.promo button{font-size:22px;padding:5px 12px}
+footer{grid-column:1/-1;text-align:center;color:#817b73;font-size:12px}
+@media(max-width:720px){main{grid-template-columns:1fr;margin:16px auto}.side{display:grid;grid-template-columns:1fr 1fr;gap:12px}.side .wide{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<main>
+<section>
+<h1>Catalyst Chess</h1><div class="sub">A chess variant featuring an original piece representing agility and reliability.</div>
+<div class="panel">
+<div class="status" id="status">White to move</div>
+<div class="board" id="board" role="grid" aria-label="Chess board"></div>
+<div class="legend"><span><b class="catalyst">✧</b> The Catalyst</span><span>Green dots show legal destinations</span></div>
+<div class="controls"><button id="undo">↶ Undo</button><button id="restart">↻ Restart</button></div>
+<div class="promo" id="promo"><strong>Promote pawn to:</strong></div>
+</div>
+</section>
+<aside class="side">
+<div class="panel">
+<h2>How the Catalyst moves</h2>
+<p>The Catalyst replaces the queenside Bishop for both players.</p>
+<ul>
+<li>Moves up to <b>three squares</b> in a straight or diagonal line; or</li>
+<li>Moves along one straight/diagonal direction, makes <b>one 90° turn</b>, then continues.</li>
+<li>It cannot jump over pieces. It captures only on its final square.</li>
+</ul>
+<div class="note"><b>Unlock condition:</b> Each Catalyst is locked until the pawn directly in front of it has actually moved. White's c-pawn unlocks the White Catalyst; Black's c-pawn unlocks the Black Catalyst.</div>
+</div>
+<div class="panel">
+<h2>Move history</h2><div id="moves">No moves yet.</div>
+<p style="font-size:13px;color:#777">Play both sides locally by taking turns.</p>
+</div>
+</aside>
+<footer>Original piece concept: The Catalyst · Agility through adaptation, reliability through follow-through.</footer>
+</main>
+<script>
+"use strict";
+const glyph={K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘",P:"♙",C:"✧",k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟",c:"✧",".":""};
+const dirs={n:[-33,-31,-18,-14,14,18,31,33],b:[-17,-15,15,17],r:[-16,-1,1,16],k:[-17,-16,-15,-1,1,15,16,17]};
+const vectors=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+const on=i=>i>=0&&i<128&&!(i&0x88), side=p=>!p||p==="."?0:p===p.toUpperCase()?1:-1;
+const sq=i=>"abcdefgh"[i&7]+(8-(i>>4)), idx=s=>(8-Number(s[1]))*16+"abcdefgh".indexOf(s[0]);
+const startFen="rncqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNCQKBNR w KQkq - 0 1";
+function parseFen(fen){
+ const f=fen.split(/\s+/),b=Array(128).fill("."),rows=f[0].split("/");
+ rows.forEach((row,r)=>{let c=0;for(const p of row){if(/[1-8]/.test(p))c+=+p;else b[r*16+c++]=p;}});
+ return {b,t:f[1]==="w"?1:-1,c:15,ep:-1,half:0,full:1,unlockedW:false,unlockedB:false};
+}
+const initial=parseFen(startFen);
+function catalystDestinations(s,f){
+ const out=new Set(),add=t=>{if(on(t)&&side(s.b[t])!==s.t)out.add(t)};
+ // Straight-line travel, up to three squares.
+ for(const d of dirs.k)for(let n=1;n<=3;n++){const t=f+d*n;if(!on(t)||side(s.b[t])===s.t)break;add(t);if(s.b[t]!==".")break;}
+ // One turn: first leg 1 or 2 squares; second leg uses remaining distance.
+ for(const [dx,dy] of vectors){
+  const d=dx+16*dy;
+  for(let a=1;a<=2;a++){
+   let pivot=f,clear=true;
+   for(let j=0;j<a;j++){pivot+=d;if(!on(pivot)||s.b[pivot]!=="."){clear=false;break;}}
+   if(!clear)continue;
+   for(const [ex,ey] of vectors){
+    if(dx*ex+dy*ey!==0)continue;
+    const e=ex+16*ey,remaining=3-a;
+    for(let b=1;b<=remaining;b++){
+     const t=pivot+e*b;
+     if(!on(t)||side(s.b[t])===s.t)break;
+     add(t);
+     if(s.b[t]!==".")break;
+    }
+   }
+  }
+ }
+ return [...out];
+}
+function attacked(s,target,by){
+ for(let f=0;f<128;f++){
+  if(!on(f)||side(s.b[f])!==by)continue;
+  const p=s.b[f].toLowerCase();
+  if(p==="c"){const z={...s,t:by};if(catalystDestinations(z,f).includes(target))return true;continue;}
+  if(p==="p"){if(target===f-16*by-1||target===f-16*by+1)return true;continue;}
+  for(const d of (dirs[p]||dirs.k))for(let t=f+d;on(t);t+=d){if(t===target)return true;if(s.b[t]!=="."||p==="n"||p==="k")break;}
+ }
+ return false;
+}
+const checked=(s,color=s.t)=>attacked(s,s.b.indexOf(color===1?"K":"k"),-color);
+function apply(s,m){
+ const [f,t,promo,flag]=m,b=s.b.slice(),piece=b[f],captured=b[t];let c=s.c;
+ b[f]=".";b[t]=promo?(s.t===1?promo.toUpperCase():promo):piece;
+ if(flag==="ep")b[t+16*s.t]=".";
+ if(flag==="castle"){const rf=t>f?f+3:f-4,rt=t>f?f+1:f-1;b[rt]=b[rf];b[rf]=".";}
+ if(piece==="K")c&=~3;if(piece==="k")c&=~12;
+ const rb={119:1,112:2,7:4,0:8};if(piece.toLowerCase()==="r")c&=~(rb[f]||0);if(captured.toLowerCase()==="r")c&=~(rb[t]||0);
+ return {b,t:-s.t,c,ep:piece.toLowerCase()==="p"&&Math.abs(t-f)===32?(t+f)/2:-1,half:piece.toLowerCase()==="p"||captured!=="."||flag==="ep"?0:s.half+1,full:s.full+(s.t===-1?1:0),unlockedW:s.unlockedW||(piece==="P"&&f===idx("c2")),unlockedB:s.unlockedB||(piece==="p"&&f===idx("c7"))};
+}
+function pseudo(s){
+ const out=[];
+ for(let f=0;f<128;f++){
+  if(!on(f)||side(s.b[f])!==s.t)continue;
+  const p=s.b[f].toLowerCase();
+  const add=(t,flag="")=>{if(s.b[t].toLowerCase()==="k")return;if(p==="p"&&(t>>4===0||t>>4===7))for(const q of ["q","r","b","n"])out.push([f,t,q,flag]);else out.push([f,t,"",flag]);};
+  if(p==="c"){
+   const unlocked=s.t===1?s.unlockedW:s.unlockedB;
+   if(unlocked)for(const t of catalystDestinations(s,f))add(t,"cat");
+   continue;
+  }
+  if(p==="p"){
+   const t=f-16*s.t;
+   if(on(t)&&s.b[t]==="."){add(t);const u=t-16*s.t;if(f>>4===(s.t===1?6:1)&&s.b[u]===".")add(u);}
+   for(const d of [-1,1]){const u=t+d;if(!on(u))continue;if(side(s.b[u])===-s.t)add(u);else if(u===s.ep&&s.b[u]==="."&&s.b[u+16*s.t]===(s.t===1?"p":"P"))add(u,"ep");}
+  }else{
+   for(const d of (dirs[p]||dirs.k))for(let t=f+d;on(t);t+=d){if(side(s.b[t])===s.t)break;add(t);if(s.b[t]!=="."||p==="n"||p==="k")break;}
+   const home=s.t===1?116:4,rook=s.t===1?"R":"r",bits=s.t===1?[1,2]:[4,8];
+   if(p==="k"&&f===home&&!checked(s)){
+    if((s.c&bits[0])&&s.b[f+3]===rook&&s.b[f+1]==="."&&s.b[f+2]==="."&&!attacked(s,f+1,-s.t)&&!attacked(s,f+2,-s.t))add(f+2,"castle");
+    if((s.c&bits[1])&&s.b[f-4]===rook&&s.b[f-1]==="."&&s.b[f-2]==="."&&s.b[f-3]==="."&&!attacked(s,f-1,-s.t)&&!attacked(s,f-2,-s.t))add(f-2,"castle");
+   }
+  }
+ }
+ return out;
+}
+const legal=s=>pseudo(s).filter(m=>!checked(apply(s,m),s.t));
+function san(s,m){
+ const [f,t,promo,flag]=m,p=s.b[f].toUpperCase(),capture=s.b[t]!=="."||flag==="ep";let z="";
+ if(flag==="castle")z=t>f?"O-O":"O-O-O";
+ else{if(p!=="P")z=p;else if(capture)z=sq(f)[0];z+=(capture?"x":"")+sq(t)+(promo?"="+promo.toUpperCase():"");}
+ const n=apply(s,m);return z+(checked(n)?legal(n).length?"+":"#":"");
+}
+function status(history){
+ const s=history.at(-1),moves=legal(s),check=checked(s);
+ if(!moves.length)return check?"Checkmate — "+(s.t===1?"Black":"White")+" wins.":"Draw — stalemate.";
+ if(s.half>=100)return "Draw may be claimed under the 50-move rule.";
+ return (s.t===1?"White":"Black")+" to move"+(check?" · Check":"");
+}
+let history=[initial],records=[],selected=-1,pending=null;
+const board=document.getElementById("board"),statusEl=document.getElementById("status"),movesEl=document.getElementById("moves"),promoEl=document.getElementById("promo");
+function render(){
+ const s=history.at(-1),moves=legal(s),targets=moves.filter(m=>m[0]===selected).map(m=>m[1]);
+ board.innerHTML="";
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+  const i=r*16+c,p=s.b[i],btn=document.createElement("button");
+  btn.className="square "+((r+c)%2?"dark":"light")+(selected===i?" selected":"")+(targets.includes(i)?(p==="."?" target":" capture"):"");
+  btn.setAttribute("aria-label",sq(i)+" "+(p==="."?"empty":p==="C"||p==="c"?"Catalyst":p));
+  btn.innerHTML=(c===0?`<span class="coords">${8-r}</span>`:"")+glyph[p]+(r===7&&c===7?'<span class="coords" style="left:auto;right:4px;top:auto;bottom:2px">h</span>':"");
+  if(p!==".")btn.classList.add(side(p)===1?"whitepiece":"blackpiece");
+  btn.addEventListener("click",()=>click(i));board.appendChild(btn);
+ }
+ statusEl.textContent=status(history);
+ movesEl.textContent=records.length?records.map((m,i)=>(i%2===0?Math.floor(i/2)+1+". ":"")+m).join("  "):"No moves yet.";
+ document.getElementById("undo").disabled=history.length===1;
+}
+function click(i){
+ if(pending)return;
+ const s=history.at(-1),moves=legal(s);
+ if(side(s.b[i])===s.t){selected=selected===i?-1:i;render();return;}
+ const choices=moves.filter(m=>m[0]===selected&&m[1]===i);
+ if(choices.length>1){pending=choices;showPromotion();return;}
+ if(choices.length===1)makeMove(choices[0]);else{selected=-1;render();}
+}
+function showPromotion(){
+ promoEl.classList.add("show");
+ for(const p of ["q","r","b","n"]){const b=document.createElement("button");b.textContent=glyph[p];b.title={q:"Queen",r:"Rook",b:"Bishop",n:"Knight"}[p];b.onclick=()=>{const m=pending.find(x=>x[2]===p);promoEl.classList.remove("show");pending=null;makeMove(m);};promoEl.appendChild(b);}
+}
+function makeMove(m){
+ const s=history.at(-1),notation=san(s,m);history.push(apply(s,m));records.push(notation);selected=-1;pending=null;promoEl.classList.remove("show");promoEl.innerHTML="<strong>Promote pawn to:</strong>";render();
+}
+document.getElementById("undo").onclick=()=>{if(history.length>1){history.pop();records.pop();selected=-1;render();}};
+document.getElementById("restart").onclick=()=>{history=[initial];records=[];selected=-1;pending=null;promoEl.classList.remove("show");promoEl.innerHTML="<strong>Promote pawn to:</strong>";render();};
+render();
+</script>
+</body></html>
