@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mars Chess</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Game</p>
+          <h1>Mars Chess</h1>
+        </div>
+        <div class="controls">
+          <button id="undoBtn" type="button">Undo</button>
+          <button id="resetBtn" type="button" class="primary">New Game</button>
+        </div>
+      </header>
+
+      <section class="board-panel">
+        <div id="board" class="board" aria-label="Chess board"></div>
+      </section>
+
+      <aside class="status-panel">
+        <p id="status" class="status">White to move</p>
+        <ul id="legend" class="legend">
+          <li>Click a piece to select it.</li>
+          <li>Click a highlighted square to move.</li>
+          <li>Promotion defaults to queen.</li>
+        </ul>
+      </aside>
+    </main>
+
+    <script type="module" src="script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "mars-chess",
+  "version": "1.0.0",
+  "description": "",
+  "main": "script.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/radikins/Mars-Chess.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/radikins/Mars-Chess/issues"
+  },
+  "homepage": "https://github.com/radikins/Mars-Chess#readme",
+  "dependencies": {
+    "chess.js": "^1.4.0"
+  }
+}
